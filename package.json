@@ -1,7 +1,7 @@
 {
-  "name": "@steipete/macos-automator-mcp",
-  "version": "0.4.6",
-  "description": "MCP Server to execute AppleScript and JXA on macOS.",
+  "name": "@schmitzjimmy1-star/macos-automator-vision-mcp",
+  "version": "0.1.0",
+  "description": "Mac Automator MCP with read-only native app inspection and screenshots.",
   "keywords": [
     "applescript",
     "automation",
@@ -9,18 +9,18 @@
     "macos",
     "mcp"
   ],
-  "homepage": "https://github.com/steipete/macos-automator-mcp#readme",
+  "homepage": "https://github.com/schmitzjimmy1-star/macos-automator-vision-mcp#readme",
   "bugs": {
-    "url": "https://github.com/steipete/macos-automator-mcp/issues"
+    "url": "https://github.com/schmitzjimmy1-star/macos-automator-vision-mcp/issues"
   },
   "license": "MIT",
-  "author": "steipete",
+  "author": "Jimmy Schmitz; based on macos-automator-mcp by steipete",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/steipete/macos-automator-mcp.git"
+    "url": "git+https://github.com/schmitzjimmy1-star/macos-automator-vision-mcp.git"
   },
   "bin": {
-    "macos-automator-mcp": "dist/server.js"
+    "macos-automator-vision-mcp": "dist/server.js"
   },
   "files": [
     "dist/**/*",
@@ -38,6 +38,7 @@
     "format": "oxfmt --write .",
     "validate": "tsx scripts/validate-kb.ts",
     "test": "vitest run",
+    "smoke:vision": "node scripts/live-vision-smoke.mjs",
     "typecheck": "tsc --noEmit",
     "format:check": "oxfmt --check ."
   },

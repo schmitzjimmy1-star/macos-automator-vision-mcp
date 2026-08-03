@@ -2,7 +2,14 @@
 
 ## Unreleased
 
-- Rewrote the README around installation and first use, with detailed tool and configuration references moved into `docs/`.
+- Added read-only `inspect_app`, `capture_app`, `verify_app`, and
+  `vision_permissions` tools backed by an allowlisted, session-isolated
+  `agent-desktop` process.
+- Added native MCP image output so Claude can inspect pixels rather than receive
+  base64 text.
+- Preserved upstream AppleScript/JXA behavior and documented a single-connector
+  Claude Cowork installation with the global upstream package retained as
+  rollback.
 
 ## [0.4.6] - 2026-08-01
 

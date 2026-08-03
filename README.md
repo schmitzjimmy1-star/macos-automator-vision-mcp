@@ -1,4 +1,59 @@
-# macOS Automator MCP 🤖 — Give your agent a Mac to operate
+# macOS Automator Vision MCP
+
+This maintained fork gives Claude Cowork one coherent Mac connector: the original
+AppleScript/JXA automation tools plus read-only native app inspection backed by
+the signed `agent-desktop` bundled with GrokBuild. Claude does not connect to
+GrokBuild's Computer Use MCP, and the vision tools never click, type, press keys,
+move the pointer, or close applications.
+
+It is based on Peter Steinberger's MIT-licensed
+[`macos-automator-mcp`](https://github.com/steipete/macos-automator-mcp).
+
+## Jimmy's Claude Cowork installation
+
+Build the server locally with Node.js 24 and pnpm, then configure one Claude MCP
+entry:
+
+```json
+{
+  "mcpServers": {
+    "macos-automator": {
+      "command": "/Users/jimmyschmitz/.nvm/versions/node/v24.14.0/bin/node",
+      "args": [
+        "/Users/jimmyschmitz/Desktop/Projects/MCP Servers/active-mcp-servers/macos-automator-vision-mcp/dist/server.js"
+      ],
+      "env": {
+        "AGENT_DESKTOP_PATH": "/Applications/GrokBuild.app/Contents/MacOS/agent-desktop",
+        "MACOS_AUTOMATOR_VISION_ALLOWED_APPS": "GrokBuild",
+        "MACOS_AUTOMATOR_VISION_ALLOWED_BUNDLE_IDS": "com.grokbuild.app",
+        "MACOS_AUTOMATOR_VISION_SESSION_PREFIX": "claude-cowork-grokbuild",
+        "MACOS_AUTOMATOR_VISION_TIMEOUT_SECONDS": "30"
+      }
+    }
+  }
+}
+```
+
+The original globally installed `@steipete/macos-automator-mcp` can remain on
+disk as a rollback. Restart Claude after switching the MCP entry.
+
+### Vision tools
+
+| Tool                 | Purpose                                                         |
+| -------------------- | --------------------------------------------------------------- |
+| `inspect_app`        | Fresh accessibility-tree snapshot of the selected main window.  |
+| `capture_app`        | Native MCP image of the selected main window.                   |
+| `verify_app`         | Fresh accessibility snapshot and screenshot of the same window. |
+| `vision_permissions` | Read permission state without requesting or changing it.        |
+
+Vision defaults to the allowlisted `GrokBuild` application. Change
+`MACOS_AUTOMATOR_VISION_ALLOWED_APPS` and its matching
+`MACOS_AUTOMATOR_VISION_ALLOWED_BUNDLE_IDS` only deliberately; comma-separated
+values are supported. The selected window must belong to an allowed bundle ID.
+Every MCP process appends its PID to the configured session prefix, so Claude's
+parallel client contexts cannot share snapshot refs.
+
+## Upstream macOS Automator documentation
 
 ![macOS Automator MCP](assets/logo.png)
 

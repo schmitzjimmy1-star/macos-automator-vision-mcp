@@ -132,5 +132,51 @@ export const GetScriptingTipsInputSchema = z.object({
 
 export type GetScriptingTipsInput = z.infer<typeof GetScriptingTipsInputSchema>;
 
+const VisionAppNameSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .optional()
+  .default("GrokBuild")
+  .describe(
+    "Application to inspect. The server enforces MACOS_AUTOMATOR_VISION_ALLOWED_APPS; the default installation permits only GrokBuild.",
+  );
+
+const VisionSnapshotOptionsShape = {
+  app: VisionAppNameSchema,
+  interactive_only: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("Return only interactive accessibility elements."),
+  include_bounds: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe("Include accessibility element bounds."),
+  max_depth: z
+    .number()
+    .int()
+    .min(1)
+    .max(30)
+    .optional()
+    .default(12)
+    .describe("Maximum accessibility-tree depth."),
+};
+
+export const InspectAppInputSchema = z.object(VisionSnapshotOptionsShape);
+
+export const CaptureAppInputSchema = z.object({
+  app: VisionAppNameSchema,
+});
+
+export const VerifyAppInputSchema = z.object(VisionSnapshotOptionsShape);
+
+export const VisionPermissionsInputSchema = z.object({});
+
+export type InspectAppInput = z.infer<typeof InspectAppInputSchema>;
+export type CaptureAppInput = z.infer<typeof CaptureAppInputSchema>;
+export type VerifyAppInput = z.infer<typeof VerifyAppInputSchema>;
+
 // Output is always { content: [{ type: "text", text: "string_output" }] }
 // No specific Zod schema needed for output beyond what MCP SDK handles.
