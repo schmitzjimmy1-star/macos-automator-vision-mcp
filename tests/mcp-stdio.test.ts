@@ -11,6 +11,12 @@ const WORKSPACE_PATH = path.resolve(__dirname, "..");
 const TSX_PATH = path.join(WORKSPACE_PATH, "node_modules", ".bin", "tsx");
 const SERVER_PATH = path.join(WORKSPACE_PATH, "src", "server.ts");
 const TSX_TSCONFIG_PATH = path.join(WORKSPACE_PATH, "tests", "tsconfig.runtime.json");
+const FAKE_AGENT_DESKTOP_PATH = path.join(
+  WORKSPACE_PATH,
+  "tests",
+  "fixtures",
+  "fake-agent-desktop.mjs",
+);
 
 const TEST_CONTENT = "Content written by execute_script via stdio test";
 
@@ -54,6 +60,10 @@ describe("MCP stdio protocol", () => {
         MCP_E2E_TESTING: "true",
         VITEST: "true",
         TSX_TSCONFIG_PATH,
+        AGENT_DESKTOP_PATH: FAKE_AGENT_DESKTOP_PATH,
+        MACOS_AUTOMATOR_VISION_ALLOWED_APPS: "GrokBuild",
+        MACOS_AUTOMATOR_VISION_ALLOWED_BUNDLE_IDS: "com.grokbuild.app",
+        MACOS_AUTOMATOR_VISION_SESSION_PREFIX: "claude-cowork-stdio-test",
       },
     });
 
@@ -73,6 +83,10 @@ describe("MCP stdio protocol", () => {
     const { tools } = await client.listTools();
     const tipsTool = toolByName(tools, "get_scripting_tips");
     const executeTool = toolByName(tools, "execute_script");
+    const inspectTool = toolByName(tools, "inspect_app");
+    const captureTool = toolByName(tools, "capture_app");
+    const verifyTool = toolByName(tools, "verify_app");
+    const permissionsTool = toolByName(tools, "vision_permissions");
 
     expect(tipsTool.annotations).toMatchObject({
       title: "Get Scripting Tips",
@@ -82,6 +96,13 @@ describe("MCP stdio protocol", () => {
       title: "Execute Script",
       destructiveHint: true,
     });
+    for (const visionTool of [inspectTool, captureTool, verifyTool, permissionsTool]) {
+      expect(visionTool.annotations).toMatchObject({
+        readOnlyHint: true,
+        destructiveHint: false,
+        openWorldHint: false,
+      });
+    }
 
     const tipsResult = await client.callTool({
       name: "get_scripting_tips",
@@ -106,6 +127,47 @@ describe("MCP stdio protocol", () => {
       await waitForFileExists(tempFilePath, 20000);
       const fileContent = await fs.readFile(tempFilePath, "utf-8");
       expect(fileContent.trim()).toBe(TEST_CONTENT);
+
+      const inspectResult = await client.callTool({
+        name: "inspect_app",
+        arguments: { app: "GrokBuild" },
+      });
+      expect(JSON.stringify(inspectResult.content)).toContain("VISION-E2E");
+      expect(JSON.stringify(inspectResult.content)).toContain("claude-cowork-stdio-test-");
+
+      const captureResult = await client.callTool({
+        name: "capture_app",
+        arguments: { app: "GrokBuild" },
+      });
+      expect(captureResult.content?.[0]).toMatchObject({
+        type: "image",
+        mimeType: "image/png",
+        data: Buffer.from("fake-png-payload").toString("base64"),
+      });
+      expect(captureResult.content?.[1]).toMatchObject({
+        type: "text",
+      });
+
+      const verifyResult = await client.callTool({
+        name: "verify_app",
+        arguments: { app: "GrokBuild" },
+      });
+      expect(verifyResult.content?.map((item) => item.type)).toEqual(["text", "image", "text"]);
+
+      const permissionsResult = await client.callTool({
+        name: "vision_permissions",
+        arguments: {},
+      });
+      expect(JSON.stringify(permissionsResult.content)).toContain("screen_recording");
+
+      const deniedResult = await client.callTool({
+        name: "capture_app",
+        arguments: { app: "Messages" },
+      });
+      expect(deniedResult.isError).toBe(true);
+      expect(JSON.stringify(deniedResult.content)).toContain(
+        "Vision access is limited to: GrokBuild",
+      );
     } finally {
       try {
         await fs.unlink(tempFilePath);

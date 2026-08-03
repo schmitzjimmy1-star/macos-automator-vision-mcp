@@ -5,6 +5,7 @@
 
 import type { ScriptExecutionError, ExecuteScriptResponse } from "./types.js";
 import type { SubstitutionResult } from "./placeholderSubstitutor.js"; // Type import
+import { VisionInspector } from "./VisionInspector.js";
 
 // Added imports for robust package.json loading
 import fs from "node:fs/promises";
@@ -32,7 +33,7 @@ const SERVER_START_TIME_ISO = new Date().toISOString();
 
 const IS_E2E_TESTING = process.env.MCP_E2E_TESTING === "true" || process.env.VITEST === "true";
 let hasEmittedFirstCallInfo = false; // Flag for first tool call
-const serverInfoMessage = `MacOS Automator MCP v${pkg.version}, started at ${SERVER_START_TIME_ISO}`;
+const serverInfoMessage = `MacOS Automator Vision MCP v${pkg.version}, started at ${SERVER_START_TIME_ISO}`;
 
 if (process.argv.includes("--version") || process.argv.includes("-v")) {
   process.stdout.write(`${pkg.version}\n`);
@@ -44,7 +45,14 @@ const [
   { StdioServerTransport },
   sdkTypes,
   { Logger },
-  { ExecuteScriptInputSchema, GetScriptingTipsInputSchema },
+  {
+    ExecuteScriptInputSchema,
+    GetScriptingTipsInputSchema,
+    InspectAppInputSchema,
+    CaptureAppInputSchema,
+    VerifyAppInputSchema,
+    VisionPermissionsInputSchema,
+  },
   { ScriptExecutor },
   { getKnowledgeBase, getScriptingTipsService, conditionallyInitializeKnowledgeBase },
   { substitutePlaceholders },
@@ -61,6 +69,7 @@ const [
 
 const logger = new Logger("macos_automator_server");
 const scriptExecutor = new ScriptExecutor();
+const visionInspector = new VisionInspector();
 
 async function main() {
   if (!IS_E2E_TESTING) {
@@ -70,7 +79,7 @@ async function main() {
     // console.log("[Server Startup] HOME:", process.env.HOME);
     // console.log("[Server Startup] USER:", process.env.USER);
 
-    logger.info("Starting macos_automator MCP Server...");
+    logger.info("Starting macos_automator_vision MCP Server...");
     logger.warn(
       "CRITICAL: Ensure macOS Automation & Accessibility permissions are correctly configured for the application running this server (e.g., Terminal, Node). See README.md for details.",
     );
@@ -85,7 +94,7 @@ async function main() {
   }
 
   const server = new McpServer({
-    name: "macos_automator", // Matches the key in mcp.json
+    name: "macos_automator_vision",
     version: pkg.version, // Dynamically use version from package.json
   });
 
@@ -442,12 +451,146 @@ async function main() {
     },
   );
 
+  server.registerTool(
+    "inspect_app",
+    {
+      annotations: {
+        title: "Inspect App",
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      description:
+        "Read a fresh accessibility-tree snapshot for an allowed native Mac application. This is the preferred first step before AppleScript/JXA automation. It never clicks, types, presses keys, moves the pointer, or changes application state.",
+      inputSchema: InspectAppInputSchema,
+    },
+    async (args: unknown) => {
+      const input = InspectAppInputSchema.parse(args);
+      const snapshot = await visionInspector.inspect(input.app, {
+        interactiveOnly: input.interactive_only,
+        includeBounds: input.include_bounds,
+        maxDepth: input.max_depth,
+      });
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Accessibility snapshot for ${input.app} (vision session ${visionInspector.session}):\n${snapshot}`,
+          },
+        ],
+      };
+    },
+  );
+
+  server.registerTool(
+    "capture_app",
+    {
+      annotations: {
+        title: "Capture App",
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      description:
+        "Capture the main visible window of an allowed Mac application and return it as native MCP image content. This is visual inspection only and never moves the pointer or performs UI actions.",
+      inputSchema: CaptureAppInputSchema,
+    },
+    async (args: unknown) => {
+      const input = CaptureAppInputSchema.parse(args);
+      const capture = await visionInspector.capture(input.app);
+      return {
+        content: [
+          {
+            type: "image" as const,
+            data: capture.data,
+            mimeType: capture.mimeType,
+          },
+          {
+            type: "text" as const,
+            text: captureReceipt(input.app, capture),
+          },
+        ],
+      };
+    },
+  );
+
+  server.registerTool(
+    "verify_app",
+    {
+      annotations: {
+        title: "Verify App",
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      description:
+        "Verify the settled visible state of an allowed Mac application after an automation step. Returns a fresh accessibility snapshot and a native screenshot of the same selected main window.",
+      inputSchema: VerifyAppInputSchema,
+    },
+    async (args: unknown) => {
+      const input = VerifyAppInputSchema.parse(args);
+      const verification = await visionInspector.verify(input.app, {
+        interactiveOnly: input.interactive_only,
+        includeBounds: input.include_bounds,
+        maxDepth: input.max_depth,
+      });
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Fresh accessibility verification for ${input.app}:\n${verification.snapshot}`,
+          },
+          {
+            type: "image" as const,
+            data: verification.capture.data,
+            mimeType: verification.capture.mimeType,
+          },
+          {
+            type: "text" as const,
+            text: captureReceipt(input.app, verification.capture),
+          },
+        ],
+      };
+    },
+  );
+
+  server.registerTool(
+    "vision_permissions",
+    {
+      annotations: {
+        title: "Vision Permissions",
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+      description:
+        "Read agent-desktop Accessibility, Screen Recording, and Automation permission states without requesting or changing permissions.",
+      inputSchema: VisionPermissionsInputSchema,
+    },
+    async (args: unknown) => {
+      VisionPermissionsInputSchema.parse(args);
+      const permissions = await visionInspector.permissions();
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: `Vision permission status (no permission prompts requested):\n${permissions}`,
+          },
+        ],
+      };
+    },
+  );
+
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
   // Graceful shutdown
   process.on("SIGINT", async () => {
-    logger.info("Shutting down macos_automator MCP Server...");
+    logger.info("Shutting down macos_automator_vision MCP Server...");
     await server.close();
     process.exit(0);
   });
@@ -457,3 +600,19 @@ main().catch((error) => {
   logger.error("Fatal error in server", error);
   process.exit(1);
 });
+
+function captureReceipt(
+  app: string,
+  capture: {
+    format: string;
+    width?: number;
+    height?: number;
+    window: { id: string; title: string };
+  },
+): string {
+  const dimensions =
+    capture.width !== undefined && capture.height !== undefined
+      ? `${capture.width}x${capture.height}`
+      : "unknown dimensions";
+  return `Captured ${app} window ${capture.window.id} (${capture.window.title || "untitled"}) as ${capture.format.toUpperCase()}, ${dimensions}.`;
+}
